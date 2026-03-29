@@ -1,0 +1,94 @@
+=======================================
+FIRESTORE SECURITY RULES
+=======================================
+
+Copy the following rules into your Firestore Console:
+https://console.firebase.google.com/project/{YOUR_PROJECT}/firestore/rules
+
+These rules implement the architecture specification:
+- Private user data (users/{uid}/decks/*)
+- Public read-only templates (publicDecks/*)
+- Admin-only publishing workflow
+
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // PRIVATE USER DATA
+    // ============================================
+    // Users can read/write only their own data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ============================================
+    // PUBLIC TEMPLATE LIBRARY
+    // ============================================
+    // All authenticated users can read templates
+    // Only admins can write (no user writes allowed)
+    match /publicDecks/{deckId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin-only via Cloud Functions or Firebase Console
+
+      match /cards/{cardId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // ============================================
+    // PUBLISHING WORKFLOW
+    // ============================================
+    // Users can create publish requests for their own decks
+    // Admins review and approve (this would trigger a Cloud Function)
+    match /publishRequests/{requestId} {
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      allow read: if request.auth != null && (
+        resource.data.ownerId == request.auth.uid || 
+        request.auth.token.admin == true
+      );
+      allow update, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+=======================================
+NOTES
+=======================================
+
+1. To set custom claims for admins:
+   - Go to Firebase Console > Authentication > Users
+   - Click the user
+   - Click "Custom claims" button
+   - Add: { "admin": true }
+   - Or use a Cloud Function to set this automatically
+
+2. Cloud Function to Auto-Approve Publishing (Optional):
+   - When a publishRequest is created with status "pending"
+   - An admin manually updates it to "approved"
+   - A Cloud Function triggers on this update and copies the deck to publicDecks/
+
+3. Data Migration:
+   - If you're migrating from /templates/ collection, follow these steps:
+     - Export /templates/ data via Firebase Console
+     - Rename collection to /publicDecks/ 
+     - Ensure card fields match the spec (front, back, createdAt only)
+     - Delete old /templates/ collection
+
+4. Testing Rules:
+   - Use Firestore Emulator during development
+   - Test in the Firebase Console's "Rules playground"
+   - Verify public read access works
+   - Verify users can't write to publicDecks
+   - Verify users can only read/write their own data
+
+=======================================
