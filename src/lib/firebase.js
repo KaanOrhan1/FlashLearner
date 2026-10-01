@@ -4,7 +4,6 @@ import { getFirestore } from "firebase/firestore";
 
 
 const firebaseConfig = {
-  apiKey: "...",
   authDomain: "flashlearn-49cc8.firebaseapp.com",
   projectId: "flashlearn-49cc8",
   storageBucket: "flashlearn-49cc8.firebasestorage.app",
